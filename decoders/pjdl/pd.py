@@ -119,8 +119,8 @@ class Decoder(srd.Decoder):
     desc = 'PJDL, a single wire serial link layer for PJON.'
     license = 'gplv2+'
     inputs = ['logic']
-    outputs = ['pjon_link']
-    tags = ['Embedded/industrial']
+    outputs = ['pjon-link']
+    tags = ['Embedded']
     channels = (
         {'id': 'data' , 'name': 'DATA', 'desc': 'Single wire data'},
     )
@@ -387,16 +387,14 @@ class Decoder(srd.Decoder):
         # for bit widths (tolerance margin).
 
         # Get times in microseconds.
-        mode_times = self.mode_times[self.options['mode']]
-        mode_times = [t * 1.0 for t in mode_times]
-        self.data_width, self.pad_width = mode_times
+        self.data_width, self.pad_width = self.mode_times[self.options['mode']]
         self.byte_width = self.pad_width + 9 * self.data_width
         self.add_idle_width = self.options['idle_add_us']
         self.idle_width = self.byte_width + self.add_idle_width
 
         # Derive ranges (add tolerance) and scale to sample counts.
         self.usec_width = self.samplerate / 1e6
-        self.hold_high_width = 9 * self.time_tol_abs * self.usec_width
+        self.hold_high_width = 2 * self.time_tol_abs * self.usec_width
 
         def _get_range(width):
             reladd = self.time_tol_perc / 100
@@ -673,12 +671,23 @@ class Decoder(srd.Decoder):
             # bit time. Improve robustness for those situations where
             # the transmitter's and the sender's timings differ within a
             # margin, and the transmitter may hold the last DATA bit's
-            # HIGH level for a little longer.
+            # HIGH level for a little longer. 
+            # Mod by @jcallano 15/jul/2020
+            # To enable detection of PAD after last bit in high the edeges list last element is removed and
+            # replaced for the actual self.samplenum to emulate a edge detection. The self.hold_high_ with was
+            # changed to 2 * self.time_tol_abs * self.usec_width
             if curr_level:
                 hold = self.hold_high_width
                 curr_level, = self.wait([{PIN_DATA: 'l'}, {'skip': int(hold)}])
-                self.carrier_check(curr_level, self.samplenum)
-                curr_snum = self.samplenum
+                if self.matched[0]:
+                    self.carrier_check(curr_level, self.samplenum)
+                    curr_snum = self.samplenum
+                elif self.matched[1]:
+                    self.edges.pop()
+                    self.edges.append(self.samplenum+1)
+                    self.carrier_check(curr_level, self.samplenum)
+                    curr_snum = self.samplenum
+                    curr_level=not curr_level
 
             # Get the byte value from the bits (when available).
             # TODO Has the local 'bit_field' become obsolete, or should
