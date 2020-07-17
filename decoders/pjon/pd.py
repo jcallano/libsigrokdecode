@@ -60,7 +60,7 @@ def calc_crc8(data):
 
 def calc_crc32(data):
     crc = 0xffffffff
-    for b in data[:-3]: #MOD by @jcallano 115/jul/2020 fix crc32 calculation on the data bytes without crc 
+    for b in data: 
         crc ^= b
         for i in range(8):
             odd = crc % 2
@@ -366,7 +366,8 @@ class Decoder(srd.Decoder):
         # Check received against expected checksum. Emit warnings.
         warn_texts = []
         data = self.frame_bytes[:-1]
-        want = calc_crc32(data) if crc_len == 32 else calc_crc8(data)
+        #MOD by @jcallano 115/jul/2020 fix crc32 calculation on the data bytes without crc 
+        want = calc_crc32(data[:-3]) if crc_len == 32 else calc_crc8(data)
         if want != have:
             want_text = crc_fmt.format(want)
             warn_texts.append('CRC mismatch - want {} have {}'.format(want_text, have_text))
